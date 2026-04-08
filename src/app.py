@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
+from image_gen import generate_book_image
 from moderation import contains_inappropriate_language, get_moderation_message
 from rag import recommend_book
 from stt import transcribe_audio_file
@@ -66,6 +67,7 @@ def main() -> None:
 	st.set_page_config(page_title="Smart Librarian", page_icon="📚", layout="centered")
 	st.session_state.setdefault("latest_result", None)
 	st.session_state.setdefault("latest_audio_path", None)
+	st.session_state.setdefault("latest_image_url", None)
 	st.session_state.setdefault("latest_transcript", "")
 
 	st.title("Smart Librarian")
@@ -148,6 +150,7 @@ def main() -> None:
 
 		st.session_state["latest_result"] = result
 		st.session_state["latest_audio_path"] = None
+		st.session_state["latest_image_url"] = None
 
 	latest_transcript = st.session_state.get("latest_transcript", "")
 	if voice_mode and latest_transcript:
@@ -157,6 +160,16 @@ def main() -> None:
 	latest_result = st.session_state.get("latest_result")
 	if isinstance(latest_result, dict):
 		render_recommendation(latest_result, show_debug)
+
+		if st.button("Generate Image", key="generate_image"):
+			title = str(latest_result.get("recommended_title", "")).strip()
+			summary = str(latest_result.get("detailed_summary", "")).strip()
+			try:
+				with st.spinner("Generating image..."):
+					image_url = generate_book_image(title, summary)
+				st.session_state["latest_image_url"] = image_url
+			except Exception as exc:
+				st.error(f"Failed to generate image: {exc}")
 
 		if st.button("Generate Audio", key="generate_audio"):
 			audio_text = build_audio_text(latest_result)
@@ -170,6 +183,10 @@ def main() -> None:
 	audio_path = st.session_state.get("latest_audio_path")
 	if isinstance(audio_path, str) and audio_path:
 		st.audio(audio_path, format="audio/mp3")
+
+	image_url = st.session_state.get("latest_image_url")
+	if isinstance(image_url, str) and image_url:
+		st.image(image_url)
 
 
 if __name__ == "__main__":
