@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
+from moderation import contains_inappropriate_language, get_moderation_message
 from rag import recommend_book
 
 
@@ -51,6 +52,10 @@ def main() -> None:
 	if st.button("Recommend a Book", type="primary"):
 		if not user_query.strip():
 			st.warning("Please enter a request before asking for a recommendation.")
+			return
+
+		if contains_inappropriate_language(user_query):
+			st.warning(get_moderation_message())
 			return
 
 		try:
