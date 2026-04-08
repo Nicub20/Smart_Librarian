@@ -1,9 +1,11 @@
+import tempfile
 from typing import Any, Dict, List
 
 import streamlit as st
 
 from moderation import contains_inappropriate_language, get_moderation_message
 from rag import recommend_book
+from tts import text_to_speech_file
 
 
 def render_debug_results(retrieved_books: List[Dict[str, Any]]) -> None:
@@ -27,8 +29,42 @@ def render_debug_results(retrieved_books: List[Dict[str, Any]]) -> None:
 			st.divider()
 
 
+def build_audio_text(result: Dict[str, Any]) -> str:
+	"""Build the final recommendation text that will be converted to audio."""
+	recommended_title = str(result.get("recommended_title", "Unknown"))
+	why_it_matches = str(result.get("why_it_matches", "No explanation available."))
+	detailed_summary = str(result.get("detailed_summary", "No detailed summary available."))
+
+	return (
+		f"Recommended title: {recommended_title}. "
+		f"Why it matches: {why_it_matches}. "
+		f"Detailed summary: {detailed_summary}"
+	)
+
+
+def render_recommendation(result: Dict[str, Any], show_debug: bool) -> None:
+	"""Render the latest recommendation result and optional debug data."""
+	st.subheader("Recommended title")
+	st.success(result.get("recommended_title", "Unknown"))
+
+	st.subheader("Why it matches")
+	st.write(result.get("why_it_matches", "No explanation available."))
+
+	with st.expander("Detailed summary"):
+		st.write(result.get("detailed_summary", "No detailed summary available."))
+
+	if show_debug:
+		retrieved_books = result.get("retrieved_books", [])
+		if isinstance(retrieved_books, list):
+			render_debug_results(retrieved_books)
+		else:
+			st.warning("Debug data was returned in an unexpected format.")
+
+
 def main() -> None:
 	st.set_page_config(page_title="Smart Librarian", page_icon="📚", layout="centered")
+	st.session_state.setdefault("latest_result", None)
+	st.session_state.setdefault("latest_audio_path", None)
 
 	st.title("Smart Librarian")
 	st.write(
@@ -65,21 +101,25 @@ def main() -> None:
 			st.error(f"Failed to generate recommendation: {exc}")
 			return
 
-		st.subheader("Recommended title")
-		st.success(result.get("recommended_title", "Unknown"))
+		st.session_state["latest_result"] = result
+		st.session_state["latest_audio_path"] = None
 
-		st.subheader("Why it matches")
-		st.write(result.get("why_it_matches", "No explanation available."))
+	latest_result = st.session_state.get("latest_result")
+	if isinstance(latest_result, dict):
+		render_recommendation(latest_result, show_debug)
 
-		with st.expander("Detailed summary"):
-			st.write(result.get("detailed_summary", "No detailed summary available."))
+		if st.button("Generate Audio"):
+			audio_text = build_audio_text(latest_result)
+			try:
+				with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+					audio_path = text_to_speech_file(audio_text, output_path=temp_file.name)
+				st.session_state["latest_audio_path"] = audio_path
+			except Exception as exc:
+				st.error(f"Failed to generate audio: {exc}")
 
-		if show_debug:
-			retrieved_books = result.get("retrieved_books", [])
-			if isinstance(retrieved_books, list):
-				render_debug_results(retrieved_books)
-			else:
-				st.warning("Debug data was returned in an unexpected format.")
+	audio_path = st.session_state.get("latest_audio_path")
+	if isinstance(audio_path, str) and audio_path:
+		st.audio(audio_path, format="audio/mp3")
 
 
 if __name__ == "__main__":
