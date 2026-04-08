@@ -5,6 +5,7 @@ import streamlit as st
 
 from moderation import contains_inappropriate_language, get_moderation_message
 from rag import recommend_book
+from stt import transcribe_audio_file
 from tts import text_to_speech_file
 
 
@@ -65,6 +66,7 @@ def main() -> None:
 	st.set_page_config(page_title="Smart Librarian", page_icon="📚", layout="centered")
 	st.session_state.setdefault("latest_result", None)
 	st.session_state.setdefault("latest_audio_path", None)
+	st.session_state.setdefault("latest_transcript", "")
 
 	st.title("Smart Librarian")
 	st.write(
@@ -79,24 +81,67 @@ def main() -> None:
 	st.sidebar.write("- Suggest a dystopian story about freedom and control")
 
 	show_debug = st.sidebar.checkbox("Show retrieved books (debug)", value=False)
-
-	user_query = st.text_input(
-		"What kind of book are you looking for?",
-		placeholder="I want a book about friendship and magic",
+	voice_mode = st.sidebar.checkbox("Voice mode", value=False)
+	language_options = {
+		"Auto": None,
+		"English": "en",
+		"Romanian": "ro",
+	}
+	selected_language = st.sidebar.selectbox(
+		"Transcription language",
+		options=list(language_options.keys()),
+		disabled=not voice_mode,
 	)
+	selected_language_code = language_options[selected_language]
+
+	user_query = ""
+	audio_input = None
+	if voice_mode:
+		audio_input = st.audio_input("Record your request")
+		st.caption("Record in English or Romanian, then click Recommend a Book.")
+	else:
+		user_query = st.text_input(
+			"What kind of book are you looking for?",
+			placeholder="I want a book about friendship and magic",
+		)
 
 	if st.button("Recommend a Book", type="primary"):
-		if not user_query.strip():
-			st.warning("Please enter a request before asking for a recommendation.")
+		final_query = user_query.strip()
+
+		if voice_mode:
+			if audio_input is None:
+				st.warning("Please record your request before asking for a recommendation.")
+				return
+
+			try:
+				with st.spinner("Transcribing your request..."):
+					final_query = transcribe_audio_file(
+						audio_input,
+						language=selected_language_code,
+					)
+			except Exception as exc:
+				st.error(f"Failed to transcribe audio: {exc}")
+				return
+
+			st.session_state["latest_transcript"] = final_query
+			st.success("Voice input processed successfully!")
+		else:
+			st.session_state["latest_transcript"] = ""
+
+		if not final_query:
+			if voice_mode:
+				st.warning("Could not understand audio. Please try again.")
+			else:
+				st.warning("Please enter or record a request before asking for a recommendation.")
 			return
 
-		if contains_inappropriate_language(user_query):
+		if contains_inappropriate_language(final_query):
 			st.warning(get_moderation_message())
 			return
 
 		try:
 			with st.spinner("Finding the perfect book for you..."):
-				result = recommend_book(user_query)
+				result = recommend_book(final_query)
 		except Exception as exc:
 			st.error(f"Failed to generate recommendation: {exc}")
 			return
@@ -104,11 +149,16 @@ def main() -> None:
 		st.session_state["latest_result"] = result
 		st.session_state["latest_audio_path"] = None
 
+	latest_transcript = st.session_state.get("latest_transcript", "")
+	if voice_mode and latest_transcript:
+		st.subheader("Recognized text")
+		st.write(latest_transcript)
+
 	latest_result = st.session_state.get("latest_result")
 	if isinstance(latest_result, dict):
 		render_recommendation(latest_result, show_debug)
 
-		if st.button("Generate Audio"):
+		if st.button("Generate Audio", key="generate_audio"):
 			audio_text = build_audio_text(latest_result)
 			try:
 				with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
