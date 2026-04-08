@@ -1,0 +1,9 @@
+1. Start backend
+- From project root (C:\Users\nbunea\Smart_Librarian_project):
+
+uvicorn src.api:app --reload
+
+2. Start frontend
+- In another terminal:
+cd smart-librarian-frontend
+npm run dev

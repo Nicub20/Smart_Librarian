@@ -2,3 +2,6 @@ openai
 chromadb
 streamlit
 python-dotenv
+fastapi
+uvicorn
+python-multipart

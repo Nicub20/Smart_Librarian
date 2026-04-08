@@ -4,7 +4,11 @@ from typing import Any, Dict, List
 
 import chromadb
 from openai import OpenAI
-from tools import get_summary_by_title
+
+try:
+	from .tools import get_summary_by_title
+except ImportError:
+	from tools import get_summary_by_title
 
 try:
 	from dotenv import load_dotenv
