@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
+from domain_guard import build_off_topic_response, is_clearly_off_topic
 from image_gen import generate_book_image
 from moderation import contains_inappropriate_language, get_moderation_message
 from rag import recommend_book
@@ -139,6 +140,12 @@ def main() -> None:
 
 		if contains_inappropriate_language(final_query):
 			st.warning(get_moderation_message())
+			return
+
+		if is_clearly_off_topic(final_query):
+			st.session_state["latest_result"] = build_off_topic_response()
+			st.session_state["latest_audio_path"] = None
+			st.session_state["latest_image_url"] = None
 			return
 
 		try:

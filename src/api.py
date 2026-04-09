@@ -10,12 +10,14 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 try:
+	from .domain_guard import build_off_topic_response, is_clearly_off_topic
 	from .image_gen import generate_book_image
 	from .moderation import contains_inappropriate_language, get_moderation_message
 	from .rag import recommend_book
 	from .stt import transcribe_audio_file
 	from .tts import text_to_speech_file
 except ImportError:
+	from domain_guard import build_off_topic_response, is_clearly_off_topic
 	from image_gen import generate_book_image
 	from moderation import contains_inappropriate_language, get_moderation_message
 	from rag import recommend_book
@@ -66,6 +68,9 @@ def recommend(payload: RecommendRequest) -> dict:
 	if contains_inappropriate_language(query):
 		raise HTTPException(status_code=400, detail=get_moderation_message())
 
+	if is_clearly_off_topic(query):
+		return build_off_topic_response()
+
 	try:
 		result = recommend_book(query)
 	except Exception as exc:
@@ -76,6 +81,7 @@ def recommend(payload: RecommendRequest) -> dict:
 		"why_it_matches": result.get("why_it_matches", ""),
 		"detailed_summary": result.get("detailed_summary", ""),
 		"retrieved_books": result.get("retrieved_books", []),
+		"off_topic": result.get("off_topic", False),
 	}
 
 

@@ -53,7 +53,7 @@ def _get_cached_summaries() -> Dict[str, str]:
 	return _SUMMARY_CACHE
 
 
-def get_summary_by_title(title: str) -> str:
+def find_summary_by_title(title: str) -> str | None:
 	"""Return full summary by title using exact or case-insensitive exact match."""
 	title = title.strip()
 	summaries = _get_cached_summaries()
@@ -66,6 +66,14 @@ def get_summary_by_title(title: str) -> str:
 		if existing_title.casefold() == lookup:
 			return summary
 
+	return None
+
+
+def get_summary_by_title(title: str) -> str:
+	"""Return a summary string for tool use, with a friendly fallback when missing."""
+	summary = find_summary_by_title(title)
+	if summary is not None:
+		return summary
 	return f"Sorry, I couldn't find a detailed summary for '{title}'."
 
 

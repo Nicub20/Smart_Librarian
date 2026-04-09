@@ -72,6 +72,16 @@ def create_embeddings(
 	return [item.embedding for item in response.data]
 
 
+def build_embedding_inputs(documents: List[Dict[str, object]]) -> List[str]:
+	"""Combine title and summary so title/author queries retrieve more reliably."""
+	inputs: List[str] = []
+	for doc in documents:
+		title = str((doc.get("metadata") or {}).get("title", "")).strip()
+		summary = str(doc.get("page_content", "")).strip()
+		inputs.append(f"Title: {title}\nSummary: {summary}")
+	return inputs
+
+
 def store_documents_in_chromadb(
 	documents: List[Dict[str, object]],
 	embeddings: List[List[float]],
@@ -140,8 +150,8 @@ def main() -> None:
 	openai_client = OpenAI(api_key=api_key)
 
 	documents = load_and_parse_file(input_file)
-	summaries = [doc["page_content"] for doc in documents]
-	embeddings = create_embeddings(openai_client, summaries, model=embedding_model)
+	embedding_inputs = build_embedding_inputs(documents)
+	embeddings = create_embeddings(openai_client, embedding_inputs, model=embedding_model)
 
 	collection = store_documents_in_chromadb(
 		documents=documents,

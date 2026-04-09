@@ -20,6 +20,7 @@ function App() {
   const [chatTitle, setChatTitle] = useState('New conversation')
   const [assistantTyping, setAssistantTyping] = useState(false)
   const chatScrollRef = useRef(null)
+  const skipNextTranscriptionRef = useRef(false)
 
   useEffect(() => {
     if (!chatScrollRef.current) {
@@ -63,6 +64,7 @@ function App() {
 
   const startNewChat = () => {
     if (isRecording && mediaRecorder && mediaRecorder.state !== 'inactive') {
+      skipNextTranscriptionRef.current = true
       mediaRecorder.stop()
     }
     clearAllAudioUrls()
@@ -214,12 +216,18 @@ function App() {
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop())
         setIsRecording(false)
-        await transcribeRecordedAudio(localChunks, recorder.mimeType)
+        if (skipNextTranscriptionRef.current) {
+          skipNextTranscriptionRef.current = false
+        } else {
+          await transcribeRecordedAudio(localChunks, recorder.mimeType)
+        }
         setAudioChunks([])
+        setRecordingSeconds(0)
         setMediaRecorder(null)
       }
 
       recorder.start()
+      skipNextTranscriptionRef.current = false
       setRecordingSeconds(0)
       setMediaRecorder(recorder)
       setIsRecording(true)
@@ -234,6 +242,7 @@ function App() {
       return
     }
 
+    skipNextTranscriptionRef.current = false
     mediaRecorder.stop()
     setIsRecording(false)
     setRecordingSeconds(0)

@@ -7,9 +7,9 @@ import chromadb
 from openai import OpenAI
 
 try:
-	from .tools import get_summary_by_title
+	from .tools import find_summary_by_title, get_summary_by_title
 except ImportError:
-	from tools import get_summary_by_title
+	from tools import find_summary_by_title, get_summary_by_title
 
 try:
 	from dotenv import load_dotenv
@@ -30,6 +30,14 @@ ROMANIAN_TITLES = {
 	"Ultima noapte de dragoste, intaia noapte de razboi",
 	"Maitreyi",
 }
+
+
+def _resolve_detailed_summary(title: str) -> str:
+	"""Return a real local summary when available, otherwise a neutral fallback."""
+	summary = find_summary_by_title(title)
+	if summary:
+		return summary
+	return "A detailed local summary is currently unavailable for this title."
 
 
 def get_openai_client() -> OpenAI:
@@ -359,9 +367,9 @@ def recommend_book(user_query: str) -> Dict[str, Any]:
 
 	# Keep summary aligned with the final chosen title if tool/model titles diverge.
 	if recommended_title and recommended_title != "Unknown":
-		detailed_summary = get_summary_by_title(recommended_title)
+		detailed_summary = _resolve_detailed_summary(recommended_title)
 	else:
-		detailed_summary = tool_result["detailed_summary"]
+		detailed_summary = tool_result["detailed_summary"] or "A detailed local summary is currently unavailable for this title."
 
 	if parsed["why_it_matches"] == "Could not parse model output safely." and retrieved_books:
 		parsed["why_it_matches"] = (
