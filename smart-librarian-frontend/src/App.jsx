@@ -5,6 +5,7 @@ function App() {
   const [composerText, setComposerText] = useState('')
   const [messages, setMessages] = useState([])
   const [history, setHistory] = useState([])
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [mediaRecorder, setMediaRecorder] = useState(null)
   const [audioChunks, setAudioChunks] = useState([])
@@ -296,11 +297,33 @@ function App() {
   }
 
   return (
-    <div className="chat-app">
+    <div className={`chat-app ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
-        <div>
-          <h1 className="sidebar-title">Smart Librarian</h1>
-          <button className="btn btn-primary sidebar-new-chat" onClick={startNewChat}>
+        <div className="sidebar-topbar">
+          <button
+            className="sidebar-toggle"
+            type="button"
+            onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            <span className="sidebar-toggle-bar" />
+            <span className="sidebar-toggle-bar" />
+            <span className="sidebar-toggle-bar" />
+          </button>
+        </div>
+
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-row">
+            <div className="sidebar-logo" aria-hidden="true">
+              <span className="sidebar-logo-book" />
+            </div>
+            <div className="sidebar-brand-copy">
+              <h1 className="sidebar-title">Smart Librarian</h1>
+              <p className="sidebar-tagline">AI book discovery with voice, images, and audio.</p>
+            </div>
+          </div>
+          <button className="btn btn-primary sidebar-new-chat" onClick={startNewChat} type="button">
             New Chat
           </button>
         </div>
@@ -416,7 +439,7 @@ function App() {
 
                     {message.imageUrl && (
                       <section className="media-card">
-                        <h5 className="media-title">Generated Image</h5>
+                        <h5 className="media-title">Suggested Book Cover</h5>
                         <img
                           className="result-image"
                           src={message.imageUrl}
