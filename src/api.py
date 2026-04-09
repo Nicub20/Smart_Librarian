@@ -1,5 +1,6 @@
 import tempfile
 import base64
+from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
@@ -131,7 +132,13 @@ async def stt(audio_file: UploadFile = File(...), language: str | None = Form(de
 		raise HTTPException(status_code=400, detail="Audio file is required.")
 
 	try:
-		transcript = transcribe_audio_file(audio_file.file, language=language)
+		audio_bytes = await audio_file.read()
+		if not audio_bytes:
+			raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
+
+		buffer = BytesIO(audio_bytes)
+		buffer.name = audio_file.filename or "recording.webm"
+		transcript = transcribe_audio_file(buffer, language=language)
 	except ValueError as exc:
 		raise HTTPException(status_code=400, detail=str(exc)) from exc
 	except Exception as exc:
