@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 function App() {
   const [composerText, setComposerText] = useState('')
   const [messages, setMessages] = useState([])
   const [history, setHistory] = useState([])
+  const [activePromptIndex, setActivePromptIndex] = useState(-1)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [mediaRecorder, setMediaRecorder] = useState(null)
@@ -16,6 +17,18 @@ function App() {
   const [transcriptionError, setTranscriptionError] = useState('')
   const [transcriptionInfo, setTranscriptionInfo] = useState('')
   const [chatTitle, setChatTitle] = useState('New conversation')
+  const [assistantTyping, setAssistantTyping] = useState(false)
+  const chatScrollRef = useRef(null)
+
+  useEffect(() => {
+    if (!chatScrollRef.current) {
+      return
+    }
+    chatScrollRef.current.scrollTo({
+      top: chatScrollRef.current.scrollHeight,
+      behavior: 'smooth',
+    })
+  }, [messages, assistantTyping])
 
   const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
@@ -38,6 +51,7 @@ function App() {
     setTranscriptionError('')
     setTranscriptionInfo('')
     setChatTitle('New conversation')
+    setActivePromptIndex(-1)
   }
 
   const buildAudioText = (bookResult) => {
@@ -104,6 +118,7 @@ function App() {
     }
 
     setLoading(true)
+    setAssistantTyping(true)
     setError('')
 
     const userMessage = {
@@ -148,6 +163,7 @@ function App() {
       setError(err instanceof Error ? err.message : 'Unexpected error occurred.')
     } finally {
       setLoading(false)
+      setAssistantTyping(false)
     }
   }
 
@@ -328,8 +344,8 @@ function App() {
           </button>
         </div>
 
-        <section className="sidebar-card">
-          <h3 className="section-title">Voice Mode</h3>
+        <section className="sidebar-card sidebar-section voice-section">
+          <h3 className="section-title"><span className="section-icon" aria-hidden="true">🎙️</span>Voice Mode</h3>
 
           <div className="field-row">
             <label className="field-label" htmlFor="voice-language">Language</label>
@@ -369,15 +385,21 @@ function App() {
           {transcriptionInfo && <div className="alert alert-success">{transcriptionInfo}</div>}
         </section>
 
-        <section className="sidebar-card history-card">
-          <h3 className="section-title">Recent Prompts</h3>
+        <section className="sidebar-card history-card sidebar-section history-section">
+          <h3 className="section-title"><span className="section-icon" aria-hidden="true">🕘</span>Recent Prompts</h3>
           {history.length === 0 ? (
             <p className="history-empty">No history yet.</p>
           ) : (
             <ul className="history-list">
               {history.map((item, idx) => (
                 <li key={`${item}-${idx}`}>
-                  <button className="history-item" onClick={() => setComposerText(item)}>
+                  <button
+                    className={`history-item ${activePromptIndex === idx ? 'active' : ''}`}
+                    onClick={() => {
+                      setComposerText(item)
+                      setActivePromptIndex(idx)
+                    }}
+                  >
                     {item}
                   </button>
                 </li>
@@ -393,7 +415,7 @@ function App() {
           <p>Ask for any book theme, genre, or style.</p>
         </header>
 
-        <section className="chat-scroll">
+        <section className="chat-scroll" ref={chatScrollRef}>
           {messages.length === 0 && (
             <div className="empty-chat">
               <h3>Start your first recommendation</h3>
@@ -403,17 +425,25 @@ function App() {
 
           {messages.map((message) => (
             <article key={message.id} className={`message-row ${message.role}`}>
+              <div className={`message-avatar ${message.role}`} aria-hidden="true">
+                {message.role === 'user' ? 'U' : 'AI'}
+              </div>
               <div className={`message-bubble ${message.role}`}>
                 {message.role === 'user' ? (
                   <p className="message-text">{message.content}</p>
                 ) : (
-                  <div>
+                  <div className="assistant-content">
+                    <p className="assistant-label">📚 Recommendation</p>
                     <h3 className="result-title">{message.result.recommended_title}</h3>
 
-                    <h4 className="result-subtitle">Why it matches</h4>
+                    <hr className="result-divider" />
+
+                    <h4 className="result-subtitle">⭐ Why it matches</h4>
                     <p className="result-text">{message.result.why_it_matches}</p>
 
-                    <h4 className="result-subtitle">Detailed summary</h4>
+                    <hr className="result-divider" />
+
+                    <h4 className="result-subtitle">📖 Detailed summary</h4>
                     <p className="result-text">{message.result.detailed_summary}</p>
 
                     <div className="button-row result-actions">
@@ -461,6 +491,19 @@ function App() {
               </div>
             </article>
           ))}
+
+          {assistantTyping && (
+            <article className="message-row assistant typing-row">
+              <div className="message-avatar assistant" aria-hidden="true">AI</div>
+              <div className="message-bubble assistant typing-bubble" aria-live="polite">
+                <div className="typing-indicator">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            </article>
+          )}
         </section>
 
         {error && <div className="alert alert-error chat-error">{error}</div>}
