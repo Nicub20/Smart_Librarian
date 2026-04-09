@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from typing import Any, Dict, List
 
 import chromadb
@@ -20,6 +21,15 @@ EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"
 CHROMA_PATH = "./chroma_db"
 COLLECTION_NAME = "book_summaries"
+ROMANIAN_TITLES = {
+	"Ion",
+	"Morometii",
+	"Enigma Otiliei",
+	"Baltagul",
+	"Padurea Spanzuratilor",
+	"Ultima noapte de dragoste, intaia noapte de razboi",
+	"Maitreyi",
+}
 
 
 def get_openai_client() -> OpenAI:
@@ -49,15 +59,35 @@ def embed_query(openai_client: OpenAI, query: str) -> List[float]:
 	return response.data[0].embedding
 
 
+def _tokenize(text: str) -> set[str]:
+	return set(re.findall(r"\b[\w']+\b", text.lower()))
+
+
+def _exclude_romanian_requested(user_query: str) -> bool:
+	query = user_query.lower()
+	patterns = [
+		"not romanian",
+		"no romanian",
+		"non-romanian",
+		"exclude romanian",
+		"nu romana",
+		"nu romanesti",
+		"fara romana",
+	]
+	return any(pattern in query for pattern in patterns)
+
+
 def retrieve_top_books(
 	collection: chromadb.Collection,
+	user_query: str,
 	query_embedding: List[float],
 	top_k: int = 3,
 ) -> List[Dict[str, Any]]:
-	# Return summary candidates plus vector distance for optional debugging/UI.
+	# Retrieve a wider candidate pool, then rerank with lexical/title signals.
+	candidate_k = max(top_k * 4, 12)
 	results = collection.query(
 		query_embeddings=[query_embedding],
-		n_results=top_k,
+		n_results=candidate_k,
 		include=["documents", "metadatas", "distances"],
 	)
 
@@ -65,14 +95,47 @@ def retrieve_top_books(
 	metadatas = results.get("metadatas", [[]])[0]
 	distances = results.get("distances", [[]])[0]
 
-	books: List[Dict[str, Any]] = []
+	query_lower = user_query.lower()
+	query_tokens = _tokenize(user_query)
+	exclude_romanian = _exclude_romanian_requested(user_query)
+
+	candidates: List[Dict[str, Any]] = []
 	for doc, meta, distance in zip(documents, metadatas, distances):
 		title = (meta or {}).get("title", "Unknown title")
-		books.append(
+		title_tokens = _tokenize(title)
+		title_lower = title.lower()
+
+		distance_value = float(distance) if distance is not None else float("inf")
+		lexical_bonus = 0.0
+		if title_lower in query_lower:
+			lexical_bonus += 1.2
+		else:
+			overlap = len(query_tokens.intersection(title_tokens))
+			lexical_bonus += min(0.45, overlap * 0.15)
+
+		romanian_penalty = 0.0
+		if exclude_romanian and title in ROMANIAN_TITLES:
+			romanian_penalty = 2.0
+
+		score = -distance_value + lexical_bonus - romanian_penalty
+		candidates.append(
 			{
 				"title": title,
 				"summary": doc,
-				"distance": float(distance) if distance is not None else float("inf"),
+				"distance": distance_value,
+				"score": score,
+			}
+		)
+
+	candidates.sort(key=lambda item: item["score"], reverse=True)
+
+	books: List[Dict[str, Any]] = []
+	for item in candidates[:top_k]:
+		books.append(
+			{
+				"title": item["title"],
+				"summary": item["summary"],
+				"distance": item["distance"],
 			}
 		)
 
@@ -135,6 +198,7 @@ def generate_recommendation_with_tool(
 	system_prompt = (
 		"You are Smart Librarian, a helpful book recommendation assistant. "
 		"Use only the retrieved context and do not invent books or details. "
+		"Always respect explicit user constraints such as excluded languages or genres. "
 		"First, choose one recommended title from the context and call the tool get_summary_by_title. "
 		"After receiving the tool result, return exactly two lines in this format:\n"
 		"Recommended title: <book title>\n"
@@ -276,7 +340,7 @@ def recommend_book(user_query: str) -> Dict[str, Any]:
 	openai_client = get_openai_client()
 	collection = get_collection()
 	query_embedding = embed_query(openai_client, user_query)
-	retrieved_books = retrieve_top_books(collection, query_embedding, top_k=3)
+	retrieved_books = retrieve_top_books(collection, user_query, query_embedding, top_k=3)
 	context = build_context(retrieved_books)
 	fallback_title = str(retrieved_books[0]["title"]) if retrieved_books else "Unknown"
 	tool_result = generate_recommendation_with_tool(
