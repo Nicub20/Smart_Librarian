@@ -16,6 +16,7 @@ function App() {
   const [error, setError] = useState('')
   const [transcriptionError, setTranscriptionError] = useState('')
   const [transcriptionInfo, setTranscriptionInfo] = useState('')
+  const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [chatTitle, setChatTitle] = useState('New conversation')
   const [assistantTyping, setAssistantTyping] = useState(false)
   const chatScrollRef = useRef(null)
@@ -30,7 +31,27 @@ function App() {
     })
   }, [messages, assistantTyping])
 
+  useEffect(() => {
+    if (!isRecording) {
+      return
+    }
+
+    const timerId = window.setInterval(() => {
+      setRecordingSeconds((prev) => prev + 1)
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timerId)
+    }
+  }, [isRecording])
+
   const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+
+  const formatDuration = (seconds) => {
+    const mins = String(Math.floor(seconds / 60)).padStart(2, '0')
+    const secs = String(seconds % 60).padStart(2, '0')
+    return `${mins}:${secs}`
+  }
 
   const clearAllAudioUrls = () => {
     messages.forEach((message) => {
@@ -52,6 +73,7 @@ function App() {
     setTranscriptionInfo('')
     setChatTitle('New conversation')
     setActivePromptIndex(-1)
+    setRecordingSeconds(0)
   }
 
   const buildAudioText = (bookResult) => {
@@ -198,6 +220,7 @@ function App() {
       }
 
       recorder.start()
+      setRecordingSeconds(0)
       setMediaRecorder(recorder)
       setIsRecording(true)
     } catch (err) {
@@ -213,6 +236,7 @@ function App() {
 
     mediaRecorder.stop()
     setIsRecording(false)
+    setRecordingSeconds(0)
   }
 
   const handleGenerateAudio = async (messageId) => {
@@ -344,7 +368,7 @@ function App() {
           </button>
         </div>
 
-        <section className="sidebar-card sidebar-section voice-section">
+        <section className={`sidebar-card sidebar-section voice-section ${isRecording ? 'is-recording' : ''} ${transcribing ? 'is-transcribing' : ''}`}>
           <h3 className="section-title"><span className="section-icon" aria-hidden="true">🎙️</span>Voice Mode</h3>
 
           <div className="field-row">
@@ -364,22 +388,27 @@ function App() {
 
           <div className="button-row">
             <button
-              className="btn btn-accent"
+              className="btn btn-accent voice-start-btn"
               onClick={handleStartRecording}
               disabled={isRecording || transcribing}
             >
-              Start Recording
+              🎙️ Start Recording
             </button>
             <button
-              className="btn btn-ghost"
+              className="btn btn-ghost voice-stop-btn"
               onClick={handleStopRecording}
               disabled={!isRecording}
             >
-              Stop Recording
+              ⏹ Stop Recording
             </button>
           </div>
 
-          {isRecording && <p className="status-live">Recording...</p>}
+          {isRecording && (
+            <div className="recording-status-row" aria-live="polite">
+              <p className="status-live">Recording...</p>
+              <p className="recording-timer">{formatDuration(recordingSeconds)}</p>
+            </div>
+          )}
           {!isRecording && transcribing && <p className="status-muted">Transcribing...</p>}
           {transcriptionError && <div className="alert alert-error">{transcriptionError}</div>}
           {transcriptionInfo && <div className="alert alert-success">{transcriptionInfo}</div>}
@@ -469,7 +498,7 @@ function App() {
 
                     {message.imageUrl && (
                       <section className="media-card">
-                        <h5 className="media-title">Suggested Book Cover</h5>
+                        <h5 className="media-title">📕 Suggested Book Cover</h5>
                         <img
                           className="result-image"
                           src={message.imageUrl}
@@ -480,10 +509,12 @@ function App() {
 
                     {message.audioUrl && (
                       <section className="media-card">
-                        <h5 className="media-title">Generated Audio</h5>
-                        <audio className="result-audio" controls src={message.audioUrl}>
-                          Your browser does not support the audio element.
-                        </audio>
+                        <h5 className="media-title">🎧 Generated Audio</h5>
+                        <div className="audio-card-inner">
+                          <audio className="result-audio" controls src={message.audioUrl}>
+                            Your browser does not support the audio element.
+                          </audio>
+                        </div>
                       </section>
                     )}
                   </div>
@@ -510,13 +541,16 @@ function App() {
 
         <footer className="composer-wrap">
           <div className="composer-box">
-            <textarea
-              className="composer-input"
-              value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
-              rows={2}
-              placeholder="Ask for a recommendation, e.g. 'Recommend a book like Steve Jobs biography'"
-            />
+            <div className="composer-input-wrap">
+              <span className="composer-input-icon" aria-hidden="true">✍️</span>
+              <textarea
+                className="composer-input"
+                value={composerText}
+                onChange={(e) => setComposerText(e.target.value)}
+                rows={2}
+                placeholder="Ask for a recommendation, e.g. 'Recommend a book like Steve Jobs biography'"
+              />
+            </div>
             <button
               className="btn btn-primary composer-send"
               onClick={handleRecommend}
